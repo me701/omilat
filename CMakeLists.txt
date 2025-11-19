@@ -23,10 +23,40 @@ set(SRC ${CMAKE_SOURCE_DIR}/src)
 find_package(OpenMP REQUIRED)
 
 # --------------------------------------------------------------------
-# BLAS (only needed for the *-blas-* targets)
-# tip: you can steer detection with -DBLA_VENDOR=OpenBLAS (etc.)
+# BLAS / Intel oneAPI MKL
+#
+# If USE_MKL=ON, we try to find Intel oneAPI MKL via its CMake package
+# (MKLConfig.cmake). Otherwise we fall back to generic BLAS.
+#
+# Usage examples (after sourcing oneAPI's setvars.sh):
+#   cmake -DUSE_MKL=ON -DCMAKE_BUILD_TYPE=Release ..
+#   cmake -DUSE_MKL=OFF ..   # or just omit to use system BLAS
 # --------------------------------------------------------------------
-find_package(BLAS)
+option(USE_MKL "Use Intel oneAPI MKL instead of generic BLAS" OFF)
+
+if(USE_MKL)
+  # oneAPI typically sets MKLROOT and installs MKLConfig.cmake under:
+  #   $MKLROOT/lib/cmake/mkl
+  # Sourcing setvars.sh should put that on CMAKE_PREFIX_PATH automatically,
+  # but you can also pass -DCMAKE_PREFIX_PATH="$MKLROOT/lib/cmake" if needed.
+  find_package(MKL CONFIG QUIET)
+
+  if(MKL_FOUND)
+    message(STATUS "Using Intel oneAPI MKL (MKL::MKL) for BLAS")
+    # Emulate CMake's BLAS variables so the rest of the file can stay the same
+    set(BLAS_FOUND TRUE)
+    set(BLAS_LIBRARIES MKL::MKL)
+  else()
+    message(FATAL_ERROR
+      "USE_MKL=ON but Intel oneAPI MKL not found.\n"
+      "Make sure you've sourced oneAPI's setvars.sh and that MKLConfig.cmake "
+      "is on CMAKE_PREFIX_PATH (e.g. -DCMAKE_PREFIX_PATH=\"$ENV{MKLROOT}/lib/cmake\").")
+  endif()
+
+else()
+  # Fallback: whatever BLAS CMake can find (OpenBLAS, Netlib, etc.)
+  find_package(BLAS)
+endif()
 
 # -------------------------
 # Fortran targets
